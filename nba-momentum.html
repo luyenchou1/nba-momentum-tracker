@@ -355,8 +355,8 @@ body {
   #mobile-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: 5px;
+    padding: 10px 8px;
     background: #161820;
     border-bottom: 1px solid #2a2d38;
     flex-shrink: 0;
@@ -364,16 +364,17 @@ body {
 
   #mobile-header h1 {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 18px;
-    letter-spacing: 1.5px;
+    font-size: 16px;
+    letter-spacing: 1px;
     color: #fff;
     margin-right: auto;
+    white-space: nowrap;
   }
 
   #mobile-header .quick-btn {
     font-family: 'DM Mono', monospace;
-    font-size: 10px;
-    padding: 4px 10px;
+    font-size: 9px;
+    padding: 4px 6px;
     border: 1px solid #3a3d48;
     border-radius: 3px;
     background: transparent;
@@ -388,8 +389,8 @@ body {
 
   #teams-btn {
     font-family: 'DM Mono', monospace;
-    font-size: 10px;
-    padding: 4px 10px;
+    font-size: 9px;
+    padding: 4px 6px;
     border: 1px solid #f77f00;
     border-radius: 3px;
     background: transparent;
@@ -425,6 +426,7 @@ body {
     <button class="quick-btn" data-action="playoff">Playoff</button>
     <button class="quick-btn" data-action="bubble">Bubble</button>
     <button class="quick-btn" data-action="all">All</button>
+    <button class="quick-btn" data-action="clear">Clear</button>
     <button id="teams-btn">Teams</button>
   </div>
   <div id="sidebar">
