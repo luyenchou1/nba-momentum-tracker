@@ -251,10 +251,182 @@ body {
   font-size: 11px;
   fill: #555;
 }
+
+/* ── Mobile header (hidden on desktop) ── */
+#mobile-header {
+  display: none;
+}
+
+/* ── Mobile drawer ── */
+#drawer-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 200;
+}
+
+#drawer-overlay.open { display: block; }
+
+#drawer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 60vh;
+  background: #161820;
+  border-top: 1px solid #3a3d48;
+  border-radius: 12px 12px 0 0;
+  z-index: 201;
+  transform: translateY(100%);
+  transition: transform 0.25s ease-out;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#drawer-overlay.open #drawer { transform: translateY(0); }
+
+#drawer-handle {
+  text-align: center;
+  padding: 10px 0 6px;
+  cursor: pointer;
+}
+
+#drawer-handle::after {
+  content: '';
+  display: inline-block;
+  width: 36px;
+  height: 4px;
+  background: #3a3d48;
+  border-radius: 2px;
+}
+
+#drawer .tabs {
+  border-bottom: 1px solid #2a2d38;
+}
+
+#drawer-teams {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0 env(safe-area-inset-bottom, 12px);
+}
+
+/* ── Mobile info bar (replaces tooltip) ── */
+#mobile-info {
+  display: none;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #1c1e2a;
+  border-top: 1px solid #3a3d48;
+  padding: 8px 14px;
+  font-size: 11px;
+  z-index: 50;
+}
+
+#mobile-info .mi-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+#mobile-info .mi-team {
+  font-weight: 500;
+  font-size: 13px;
+}
+
+#mobile-info .mi-detail { color: #aaa; }
+
+/* ── Mobile media query ── */
+@media (max-width: 768px) {
+  body { overflow: auto; }
+
+  #app {
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  #sidebar { display: none; }
+
+  #mobile-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: #161820;
+    border-bottom: 1px solid #2a2d38;
+    flex-shrink: 0;
+  }
+
+  #mobile-header h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 1.5px;
+    color: #fff;
+    margin-right: auto;
+  }
+
+  #mobile-header .quick-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    padding: 4px 10px;
+    border: 1px solid #3a3d48;
+    border-radius: 3px;
+    background: transparent;
+    color: #999;
+    cursor: pointer;
+  }
+
+  #mobile-header .quick-btn.active {
+    border-color: #f77f00;
+    color: #f77f00;
+  }
+
+  #teams-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    padding: 4px 10px;
+    border: 1px solid #f77f00;
+    border-radius: 3px;
+    background: transparent;
+    color: #f77f00;
+    cursor: pointer;
+  }
+
+  #chart-container {
+    flex: 1;
+    min-height: 0;
+  }
+
+  #mobile-info { display: none; }
+  #mobile-info.visible { display: block; }
+
+  .team-line { stroke-width: 2.5; }
+  .team-line.highlighted { stroke-width: 4; }
+
+  #tooltip { display: none !important; }
+
+  #updated {
+    top: 4px;
+    right: 8px;
+    font-size: 9px;
+  }
+}
 </style>
 </head>
 <body>
 <div id="app">
+  <div id="mobile-header">
+    <h1>NBA MOMENTUM</h1>
+    <button class="quick-btn" data-action="playoff">Playoff</button>
+    <button class="quick-btn" data-action="bubble">Bubble</button>
+    <button class="quick-btn" data-action="all">All</button>
+    <button id="teams-btn">Teams</button>
+  </div>
   <div id="sidebar">
     <div id="sidebar-header">
       <h1>NBA MOMENTUM</h1>
@@ -277,6 +449,19 @@ body {
     <div id="updated"></div>
     <svg id="chart"></svg>
     <div id="tooltip"></div>
+    <div id="mobile-info"></div>
+  </div>
+</div>
+
+<div id="drawer-overlay">
+  <div id="drawer">
+    <div id="drawer-handle"></div>
+    <div class="tabs">
+      <div class="tab active" data-filter="all" data-mobile>All</div>
+      <div class="tab" data-filter="East" data-mobile>East</div>
+      <div class="tab" data-filter="West" data-mobile>West</div>
+    </div>
+    <div id="drawer-teams"></div>
   </div>
 </div>
 
@@ -306,11 +491,14 @@ function getTeamColor(abbr) {
 // Conference standings rank for quick-select
 let teamRanks = {};
 
+const isMobile = () => window.innerWidth <= 768;
+
 const state = {
   data: null,
   selected: new Set(),
   hoveredTeam: null,
   confFilter: "all",
+  tappedTeam: null,
 };
 
 // ── Load and render ──
@@ -320,8 +508,8 @@ fetch("nba_chart_data.json")
     state.data = data;
     computeRanks();
     buildSidebar();
+    buildMobile();
     drawChart();
-    // Select top 5 by default
     selectPreset("playoff");
     window.addEventListener("resize", drawChart);
   });
@@ -445,7 +633,10 @@ function drawChart() {
   const container = document.getElementById("chart-container");
   const W = container.clientWidth;
   const H = container.clientHeight;
-  const margin = { top: 30, right: 70, bottom: 40, left: 55 };
+  const mobile = isMobile();
+  const margin = mobile
+    ? { top: 20, right: 46, bottom: 34, left: 40 }
+    : { top: 30, right: 70, bottom: 40, left: 55 };
 
   const svg = d3.select("#chart")
     .attr("width", W)
@@ -497,29 +688,31 @@ function drawChart() {
   g.append("g")
     .attr("class", "axis")
     .attr("transform", `translate(0,${chartH})`)
-    .call(d3.axisBottom(xScale).ticks(10).tickFormat(d => d === 0 ? "" : d));
+    .call(d3.axisBottom(xScale).ticks(mobile ? 5 : 10).tickFormat(d => d === 0 ? "" : d));
 
   g.append("g")
     .attr("class", "axis")
-    .call(d3.axisLeft(yScale).ticks(8).tickFormat(d => {
+    .call(d3.axisLeft(yScale).ticks(mobile ? 5 : 8).tickFormat(d => {
       if (d === 0) return ".500";
       return (d > 0 ? "+" : "") + d;
     }));
 
-  // Y-axis label
-  g.append("text")
-    .attr("class", "y-axis-label")
-    .attr("transform", "rotate(-90)")
-    .attr("x", -chartH / 2)
-    .attr("y", -42)
-    .attr("text-anchor", "middle")
-    .text("Games Above / Below .500");
+  if (!mobile) {
+    // Y-axis label
+    g.append("text")
+      .attr("class", "y-axis-label")
+      .attr("transform", "rotate(-90)")
+      .attr("x", -chartH / 2)
+      .attr("y", -42)
+      .attr("text-anchor", "middle")
+      .text("Games Above / Below .500");
+  }
 
   // X-axis label
   g.append("text")
     .attr("class", "y-axis-label")
     .attr("x", chartW / 2)
-    .attr("y", chartH + 34)
+    .attr("y", chartH + (mobile ? 28 : 34))
     .attr("text-anchor", "middle")
     .text("Games Played");
 
@@ -567,7 +760,7 @@ function drawChart() {
   }).sort((a, b) => a.targetY - b.targetY);
 
   // Push apart overlapping labels
-  const labelH = 12;
+  const labelH = mobile ? 10 : 12;
   for (let iter = 0; iter < 20; iter++) {
     let moved = false;
     for (let i = 1; i < labels.length; i++) {
@@ -585,9 +778,10 @@ function drawChart() {
     g.append("text")
       .attr("class", "end-label")
       .attr("data-team", lbl.abbr)
-      .attr("x", lbl.x + 6)
+      .attr("x", lbl.x + (mobile ? 4 : 6))
       .attr("y", lbl.y + 4)
       .attr("fill", getTeamColor(lbl.abbr))
+      .style("font-size", mobile ? "8px" : null)
       .text(lbl.abbr);
   });
 
@@ -674,6 +868,124 @@ function drawChart() {
     const d = new Date(state.data.lastUpdated);
     document.getElementById("updated").textContent = `Updated ${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
   }
+
+  // Mobile touch handling
+  if (isMobile()) {
+    overlay.on("mousemove", null).on("mouseleave", null);
+
+    overlay.on("click", function(event) {
+      if (state.selected.size === 0) return;
+      const [mx, my] = d3.pointer(event);
+      const gameNum = Math.round(xScale.invert(mx));
+      if (gameNum < 1) return;
+
+      let closest = null;
+      let closestDist = Infinity;
+      selectedTeams.forEach(({ abbr, games }) => {
+        const idx = bisect(games, gameNum) - 1;
+        const gm = games[Math.max(0, Math.min(idx, games.length - 1))];
+        if (!gm) return;
+        const candidates = [gm];
+        if (idx + 1 < games.length) candidates.push(games[idx + 1]);
+        candidates.forEach(c => {
+          const py = yScale((c.wins - c.losses) / 2);
+          const px = xScale(c.game_num);
+          const dist = Math.sqrt((px - mx) ** 2 + (py - my) ** 2);
+          if (dist < closestDist) { closestDist = dist; closest = { abbr, game: c }; }
+        });
+      });
+
+      const info = document.getElementById("mobile-info");
+      if (!closest || closestDist > 50) {
+        info.classList.remove("visible");
+        state.tappedTeam = null;
+        hoverTeam(null);
+        return;
+      }
+
+      state.tappedTeam = closest.abbr;
+      hoverTeam(closest.abbr);
+      const gm = closest.game;
+      const wa500 = ((gm.wins - gm.losses) / 2).toFixed(1);
+      const rc = gm.result === "W" ? "tt-win" : "tt-loss";
+      const dateStr = gm.date ? new Date(gm.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+
+      info.innerHTML = `<div class="mi-row">
+        <span class="mi-team" style="color:${getTeamColor(closest.abbr)}">${closest.abbr}</span>
+        <span class="mi-detail">G${gm.game_num} ${dateStr}</span>
+        <span class="${rc}">${gm.result} ${gm.score} ${gm.home_away === "H" ? "vs" : "@"} ${gm.opponent}</span>
+        <span class="mi-detail">${gm.wins}-${gm.losses} (${wa500 > 0 ? "+" : ""}${wa500})</span>
+      </div>`;
+      info.classList.add("visible");
+    });
+  }
+}
+
+// ── Mobile UI ──
+function buildMobile() {
+  // Mobile header quick-select buttons
+  document.querySelectorAll("#mobile-header .quick-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      selectPreset(btn.dataset.action);
+      document.querySelectorAll("#mobile-header .quick-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+    });
+  });
+
+  // Teams drawer toggle
+  const overlay = document.getElementById("drawer-overlay");
+  document.getElementById("teams-btn").addEventListener("click", () => {
+    overlay.classList.add("open");
+    renderDrawerTeams();
+  });
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) overlay.classList.remove("open");
+  });
+  document.getElementById("drawer-handle").addEventListener("click", () => {
+    overlay.classList.remove("open");
+  });
+
+  // Drawer tabs
+  document.querySelectorAll("[data-mobile].tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll("[data-mobile].tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      state.confFilter = tab.dataset.filter;
+      renderDrawerTeams();
+      // Sync desktop sidebar tabs too
+      document.querySelectorAll(".tab:not([data-mobile])").forEach(t => {
+        t.classList.toggle("active", t.dataset.filter === state.confFilter);
+      });
+      renderTeamList(document.getElementById("team-list"));
+    });
+  });
+}
+
+function renderDrawerTeams() {
+  const container = document.getElementById("drawer-teams");
+  container.innerHTML = "";
+  const teams = Object.entries(state.data.teams)
+    .map(([abbr, t]) => {
+      const last = t.games[t.games.length - 1];
+      return { abbr, conf: t.conference, wins: last.wins, losses: last.losses, diff: last.wins - last.losses };
+    })
+    .filter(t => state.confFilter === "all" || t.conf === state.confFilter)
+    .sort((a, b) => b.diff - a.diff);
+
+  teams.forEach(t => {
+    const el = document.createElement("div");
+    el.className = "team-item" + (state.selected.has(t.abbr) ? " selected" : "");
+    el.innerHTML = `
+      <div class="team-swatch" style="background:${getTeamColor(t.abbr)}"></div>
+      <span class="team-abbr">${t.abbr}</span>
+      <span class="team-record">${t.wins}-${t.losses}</span>
+    `;
+    el.addEventListener("click", () => {
+      toggleTeam(t.abbr);
+      el.classList.toggle("selected", state.selected.has(t.abbr));
+    });
+    container.appendChild(el);
+  });
 }
 </script>
 </body>
