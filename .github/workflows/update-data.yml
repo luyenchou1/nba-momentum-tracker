@@ -1,0 +1,37 @@
+name: Update NBA Data
+
+on:
+  schedule:
+    # Run daily at 12:00 UTC (7am ET / 4am PT) during NBA season
+    - cron: '0 12 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Run scraper
+        run: python scrape_nba.py
+
+      - name: Export chart data
+        run: python export_chart_data.py
+
+      - name: Commit and push if data changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add nba_chart_data.json
+          git diff --cached --quiet || git commit -m "Update NBA data $(date -u +%Y-%m-%d)"
+          git push

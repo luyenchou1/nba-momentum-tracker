@@ -1,0 +1,5 @@
+nba_games.db
+update.log
+__pycache__/
+*.pyc
+.claude/

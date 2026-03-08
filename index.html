@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBA Momentum Tracker 2025-26</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0f1117;
+  color: #e0e0e0;
+  font-family: 'DM Mono', monospace;
+  overflow: hidden;
+  height: 100vh;
+}
+
+#app {
+  display: flex;
+  height: 100vh;
+}
+
+/* ── Sidebar ── */
+#sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: #161820;
+  border-right: 1px solid #2a2d38;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#sidebar-header {
+  padding: 16px 14px 10px;
+  border-bottom: 1px solid #2a2d38;
+}
+
+#sidebar-header h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  letter-spacing: 2px;
+  color: #fff;
+  line-height: 1;
+}
+
+#sidebar-header .subtitle {
+  font-size: 10px;
+  color: #666;
+  margin-top: 2px;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid #2a2d38;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tab:hover { color: #aaa; }
+.tab.active { color: #fff; border-bottom-color: #f77f00; }
+
+/* Quick select */
+.quick-select {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #2a2d38;
+  flex-wrap: wrap;
+}
+
+.quick-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  padding: 3px 8px;
+  border: 1px solid #3a3d48;
+  border-radius: 3px;
+  background: transparent;
+  color: #999;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.quick-btn:hover { border-color: #888; color: #ddd; }
+.quick-btn.active { border-color: #f77f00; color: #f77f00; }
+
+/* Team list */
+#team-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+#team-list::-webkit-scrollbar { width: 4px; }
+#team-list::-webkit-scrollbar-track { background: transparent; }
+#team-list::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+.team-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  gap: 8px;
+}
+
+.team-item:hover { background: #1e2030; }
+.team-item.selected { background: #1a1c2e; }
+
+.team-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+}
+
+.team-item.selected .team-swatch { opacity: 1; }
+
+.team-abbr {
+  font-size: 11px;
+  font-weight: 500;
+  width: 32px;
+  color: #888;
+  transition: color 0.15s;
+}
+
+.team-item.selected .team-abbr { color: #fff; }
+
+.team-record {
+  font-size: 10px;
+  color: #555;
+  margin-left: auto;
+}
+
+.team-item.selected .team-record { color: #888; }
+
+/* ── Chart ── */
+#chart-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+#updated {
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  font-size: 10px;
+  color: #444;
+  z-index: 5;
+}
+
+.axis text {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  fill: #555;
+}
+
+.axis line, .axis path {
+  stroke: #2a2d38;
+}
+
+.grid line {
+  stroke: #1e2028;
+  stroke-dasharray: 2, 4;
+}
+
+.grid .domain { stroke: none; }
+
+.zero-line {
+  stroke: #3a3d48;
+  stroke-width: 1;
+  stroke-dasharray: 4, 3;
+}
+
+.team-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: opacity 0.2s;
+  cursor: pointer;
+}
+
+.team-line.dimmed { opacity: 0.06; }
+.team-line.highlighted { stroke-width: 3; }
+
+.end-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.end-label.dimmed { opacity: 0.06; }
+
+/* Tooltip */
+#tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: #1c1e2a;
+  border: 1px solid #3a3d48;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.6;
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.12s;
+  min-width: 160px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+#tooltip .tt-team {
+  font-weight: 500;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+#tooltip .tt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+#tooltip .tt-label { color: #888; }
+#tooltip .tt-value { color: #ddd; }
+.tt-win { color: #4ade80 !important; }
+.tt-loss { color: #f87171 !important; }
+
+/* Y-axis label */
+.y-axis-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  fill: #555;
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <h1>NBA MOMENTUM</h1>
+      <div class="subtitle">2025-26 Season &middot; Wins Above .500</div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" data-filter="all">All</div>
+      <div class="tab" data-filter="East">East</div>
+      <div class="tab" data-filter="West">West</div>
+    </div>
+    <div class="quick-select">
+      <button class="quick-btn" data-action="playoff">Playoff</button>
+      <button class="quick-btn" data-action="bubble">Bubble</button>
+      <button class="quick-btn" data-action="all">All</button>
+      <button class="quick-btn" data-action="clear">Clear</button>
+    </div>
+    <div id="team-list"></div>
+  </div>
+  <div id="chart-container">
+    <div id="updated"></div>
+    <svg id="chart"></svg>
+    <div id="tooltip"></div>
+  </div>
+</div>
+
+<script>
+// NBA team colors
+const TEAM_COLORS = {
+  ATL: "#e03a3e", BOS: "#007a33", BKN: "#777d84", CHA: "#1d1160",
+  CHI: "#ce1141", CLE: "#6f263d", DAL: "#00538c", DEN: "#0e2240",
+  DET: "#c8102e", GSW: "#1d428a", HOU: "#ce1141", IND: "#002d62",
+  LAC: "#c8102e", LAL: "#552583", MEM: "#5d76a9", MIA: "#98002e",
+  MIL: "#00471b", MIN: "#0c2340", NOP: "#0c2340", NYK: "#f58426",
+  OKC: "#007ac1", ORL: "#0077c0", PHI: "#006bb6", PHX: "#e56020",
+  POR: "#e03a3e", SAC: "#5a2d81", SAS: "#c4ced4", TOR: "#ce1141",
+  UTA: "#002b5c", WAS: "#002b5c"
+};
+
+// Secondary colors for teams with dark primaries (for visibility on dark bg)
+const TEAM_COLORS_LIGHT = {
+  CHA: "#00788c", DAL: "#00a4e4", DEN: "#fec524", IND: "#fdbb30",
+  MIN: "#236192", NOP: "#c8102e", UTA: "#f9a01b", WAS: "#e31837"
+};
+
+function getTeamColor(abbr) {
+  return TEAM_COLORS_LIGHT[abbr] || TEAM_COLORS[abbr];
+}
+
+// Conference standings rank for quick-select
+let teamRanks = {};
+
+const state = {
+  data: null,
+  selected: new Set(),
+  hoveredTeam: null,
+  confFilter: "all",
+};
+
+// ── Load and render ──
+fetch("nba_chart_data.json")
+  .then(r => r.json())
+  .then(data => {
+    state.data = data;
+    computeRanks();
+    buildSidebar();
+    drawChart();
+    // Select top 5 by default
+    selectPreset("playoff");
+    window.addEventListener("resize", drawChart);
+  });
+
+function computeRanks() {
+  const teams = Object.entries(state.data.teams).map(([abbr, t]) => {
+    const last = t.games[t.games.length - 1];
+    return { abbr, conf: t.conference, wins: last.wins, losses: last.losses, diff: last.wins - last.losses };
+  });
+
+  ["East", "West"].forEach(conf => {
+    const sorted = teams.filter(t => t.conf === conf).sort((a, b) => b.diff - a.diff);
+    sorted.forEach((t, i) => { teamRanks[t.abbr] = { conf, rank: i + 1, wins: t.wins, losses: t.losses }; });
+  });
+}
+
+// ── Sidebar ──
+function buildSidebar() {
+  const list = document.getElementById("team-list");
+  renderTeamList(list);
+
+  // Tabs
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      state.confFilter = tab.dataset.filter;
+      renderTeamList(list);
+    });
+  });
+
+  // Quick select
+  document.querySelectorAll(".quick-btn").forEach(btn => {
+    btn.addEventListener("click", () => selectPreset(btn.dataset.action));
+  });
+}
+
+function renderTeamList(list) {
+  list.innerHTML = "";
+  const teams = Object.entries(state.data.teams)
+    .map(([abbr, t]) => {
+      const last = t.games[t.games.length - 1];
+      return { abbr, conf: t.conference, wins: last.wins, losses: last.losses, diff: last.wins - last.losses };
+    })
+    .filter(t => state.confFilter === "all" || t.conf === state.confFilter)
+    .sort((a, b) => b.diff - a.diff);
+
+  teams.forEach(t => {
+    const el = document.createElement("div");
+    el.className = "team-item" + (state.selected.has(t.abbr) ? " selected" : "");
+    el.innerHTML = `
+      <div class="team-swatch" style="background:${getTeamColor(t.abbr)}"></div>
+      <span class="team-abbr">${t.abbr}</span>
+      <span class="team-record">${t.wins}-${t.losses}</span>
+    `;
+    el.addEventListener("click", () => toggleTeam(t.abbr));
+    el.addEventListener("mouseenter", () => hoverTeam(t.abbr));
+    el.addEventListener("mouseleave", () => hoverTeam(null));
+    list.appendChild(el);
+  });
+}
+
+function toggleTeam(abbr) {
+  if (state.selected.has(abbr)) state.selected.delete(abbr);
+  else state.selected.add(abbr);
+  updateSelectionUI();
+  drawChart();
+}
+
+function hoverTeam(abbr) {
+  state.hoveredTeam = abbr;
+  updateHoverUI();
+}
+
+function selectPreset(action) {
+  state.selected.clear();
+  if (action === "playoff") {
+    Object.entries(teamRanks)
+      .filter(([, r]) => r.rank <= 10)
+      .forEach(([abbr]) => state.selected.add(abbr));
+  } else if (action === "bubble") {
+    Object.entries(teamRanks)
+      .filter(([, r]) => r.rank >= 7 && r.rank <= 14)
+      .forEach(([abbr]) => state.selected.add(abbr));
+  } else if (action === "all") {
+    Object.keys(state.data.teams).forEach(abbr => state.selected.add(abbr));
+  }
+  // "clear" just leaves the set empty
+  updateSelectionUI();
+  drawChart();
+}
+
+function updateSelectionUI() {
+  document.querySelectorAll(".team-item").forEach(el => {
+    const abbr = el.querySelector(".team-abbr").textContent;
+    el.classList.toggle("selected", state.selected.has(abbr));
+  });
+  // Highlight active quick-btn
+  document.querySelectorAll(".quick-btn").forEach(b => b.classList.remove("active"));
+}
+
+function updateHoverUI() {
+  const svg = d3.select("#chart");
+  const hovered = state.hoveredTeam;
+  if (!hovered || !state.selected.has(hovered)) {
+    svg.selectAll(".team-line").classed("dimmed", false).classed("highlighted", false);
+    svg.selectAll(".end-label").classed("dimmed", false);
+    return;
+  }
+  svg.selectAll(".team-line")
+    .classed("dimmed", d => d.abbr !== hovered)
+    .classed("highlighted", d => d.abbr === hovered);
+  svg.selectAll(".end-label")
+    .classed("dimmed", function() { return d3.select(this).attr("data-team") !== hovered; });
+}
+
+// ── Chart ──
+function drawChart() {
+  if (!state.data) return;
+
+  const container = document.getElementById("chart-container");
+  const W = container.clientWidth;
+  const H = container.clientHeight;
+  const margin = { top: 30, right: 70, bottom: 40, left: 55 };
+
+  const svg = d3.select("#chart")
+    .attr("width", W)
+    .attr("height", H);
+  svg.selectAll("*").remove();
+
+  const chartW = W - margin.left - margin.right;
+  const chartH = H - margin.top - margin.bottom;
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // Scales
+  const xScale = d3.scaleLinear().domain([0, 82]).range([0, chartW]);
+
+  // Compute Y domain from selected teams
+  let yMin = -20, yMax = 20;
+  if (state.selected.size > 0) {
+    let minVal = Infinity, maxVal = -Infinity;
+    state.selected.forEach(abbr => {
+      const team = state.data.teams[abbr];
+      if (!team) return;
+      team.games.forEach(gm => {
+        const val = (gm.wins - gm.losses) / 2;
+        if (val < minVal) minVal = val;
+        if (val > maxVal) maxVal = val;
+      });
+    });
+    if (minVal !== Infinity) {
+      yMin = Math.min(-2, Math.floor(minVal) - 2);
+      yMax = Math.max(2, Math.ceil(maxVal) + 2);
+    }
+  }
+
+  const yScale = d3.scaleLinear().domain([yMin, yMax]).range([chartH, 0]);
+
+  // Grid
+  g.append("g")
+    .attr("class", "grid")
+    .call(d3.axisLeft(yScale).tickSize(-chartW).tickFormat(""))
+    .select(".domain").remove();
+
+  // Zero line
+  g.append("line")
+    .attr("class", "zero-line")
+    .attr("x1", 0).attr("x2", chartW)
+    .attr("y1", yScale(0)).attr("y2", yScale(0));
+
+  // Axes
+  g.append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(0,${chartH})`)
+    .call(d3.axisBottom(xScale).ticks(10).tickFormat(d => d === 0 ? "" : d));
+
+  g.append("g")
+    .attr("class", "axis")
+    .call(d3.axisLeft(yScale).ticks(8).tickFormat(d => {
+      if (d === 0) return ".500";
+      return (d > 0 ? "+" : "") + d;
+    }));
+
+  // Y-axis label
+  g.append("text")
+    .attr("class", "y-axis-label")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -chartH / 2)
+    .attr("y", -42)
+    .attr("text-anchor", "middle")
+    .text("Games Above / Below .500");
+
+  // X-axis label
+  g.append("text")
+    .attr("class", "y-axis-label")
+    .attr("x", chartW / 2)
+    .attr("y", chartH + 34)
+    .attr("text-anchor", "middle")
+    .text("Games Played");
+
+  // Line generator
+  const line = d3.line()
+    .x(d => xScale(d.game_num))
+    .y(d => yScale((d.wins - d.losses) / 2));
+
+  // Draw lines for selected teams
+  const selectedTeams = [];
+  state.selected.forEach(abbr => {
+    const team = state.data.teams[abbr];
+    if (!team) return;
+    // Prepend origin point (0 games, 0 wins above .500)
+    const pts = [{ game_num: 0, wins: 0, losses: 0 }, ...team.games];
+    selectedTeams.push({ abbr, pts, games: team.games });
+  });
+
+  // Sort so hovered team draws last (on top)
+  selectedTeams.sort((a, b) => {
+    if (a.abbr === state.hoveredTeam) return 1;
+    if (b.abbr === state.hoveredTeam) return -1;
+    return 0;
+  });
+
+  selectedTeams.forEach(({ abbr, pts }) => {
+    g.append("path")
+      .datum({ abbr })
+      .attr("class", "team-line")
+      .attr("d", line(pts))
+      .attr("stroke", getTeamColor(abbr))
+      .on("mouseenter", () => hoverTeam(abbr))
+      .on("mouseleave", () => hoverTeam(null));
+  });
+
+  // End labels with collision avoidance
+  const labels = selectedTeams.map(({ abbr, pts }) => {
+    const last = pts[pts.length - 1];
+    return {
+      abbr,
+      x: xScale(last.game_num),
+      y: yScale((last.wins - last.losses) / 2),
+      targetY: yScale((last.wins - last.losses) / 2),
+    };
+  }).sort((a, b) => a.targetY - b.targetY);
+
+  // Push apart overlapping labels
+  const labelH = 12;
+  for (let iter = 0; iter < 20; iter++) {
+    let moved = false;
+    for (let i = 1; i < labels.length; i++) {
+      const overlap = labels[i - 1].y + labelH - labels[i].y;
+      if (overlap > 0) {
+        labels[i - 1].y -= overlap / 2;
+        labels[i].y += overlap / 2;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+
+  labels.forEach(lbl => {
+    g.append("text")
+      .attr("class", "end-label")
+      .attr("data-team", lbl.abbr)
+      .attr("x", lbl.x + 6)
+      .attr("y", lbl.y + 4)
+      .attr("fill", getTeamColor(lbl.abbr))
+      .text(lbl.abbr);
+  });
+
+  // Hover overlay for tooltip
+  const overlay = g.append("rect")
+    .attr("width", chartW)
+    .attr("height", chartH)
+    .attr("fill", "none")
+    .attr("pointer-events", "all");
+
+  const tooltip = document.getElementById("tooltip");
+  const bisect = d3.bisector(d => d.game_num).left;
+
+  overlay.on("mousemove", function(event) {
+    if (state.selected.size === 0) {
+      tooltip.style.opacity = 0;
+      return;
+    }
+    const [mx, my] = d3.pointer(event);
+    const gameNum = Math.round(xScale.invert(mx));
+    if (gameNum < 1) { tooltip.style.opacity = 0; return; }
+
+    // Find closest team line
+    let closest = null;
+    let closestDist = Infinity;
+    selectedTeams.forEach(({ abbr, games }) => {
+      const idx = bisect(games, gameNum) - 1;
+      const gm = games[Math.max(0, Math.min(idx, games.length - 1))];
+      if (!gm) return;
+      // Also check next game for better snapping
+      const candidates = [gm];
+      if (idx + 1 < games.length) candidates.push(games[idx + 1]);
+
+      candidates.forEach(c => {
+        const py = yScale((c.wins - c.losses) / 2);
+        const px = xScale(c.game_num);
+        const dist = Math.sqrt((px - mx) ** 2 + (py - my) ** 2);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closest = { abbr, game: c };
+        }
+      });
+    });
+
+    if (!closest || closestDist > 40) {
+      tooltip.style.opacity = 0;
+      hoverTeam(null);
+      return;
+    }
+
+    hoverTeam(closest.abbr);
+    const gm = closest.game;
+    const wa500 = ((gm.wins - gm.losses) / 2).toFixed(1);
+    const resultClass = gm.result === "W" ? "tt-win" : "tt-loss";
+    const dateStr = gm.date ? new Date(gm.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+
+    tooltip.innerHTML = `
+      <div class="tt-team" style="color:${getTeamColor(closest.abbr)}">${closest.abbr}</div>
+      <div class="tt-row"><span class="tt-label">Game</span><span class="tt-value">${gm.game_num}</span></div>
+      <div class="tt-row"><span class="tt-label">Date</span><span class="tt-value">${dateStr}</span></div>
+      <div class="tt-row"><span class="tt-label">Result</span><span class="tt-value ${resultClass}">${gm.result} ${gm.score} ${gm.home_away === "H" ? "vs" : "@"} ${gm.opponent}</span></div>
+      <div class="tt-row"><span class="tt-label">Record</span><span class="tt-value">${gm.wins}-${gm.losses}</span></div>
+      <div class="tt-row"><span class="tt-label">vs .500</span><span class="tt-value">${wa500 > 0 ? "+" : ""}${wa500}</span></div>
+    `;
+    tooltip.style.opacity = 1;
+
+    // Position tooltip
+    const rect = container.getBoundingClientRect();
+    let tx = event.clientX - rect.left + 16;
+    let ty = event.clientY - rect.top - 10;
+    if (tx + 200 > W) tx = event.clientX - rect.left - 200;
+    if (ty + 140 > H) ty -= 120;
+    tooltip.style.left = tx + "px";
+    tooltip.style.top = ty + "px";
+  });
+
+  overlay.on("mouseleave", () => {
+    tooltip.style.opacity = 0;
+    hoverTeam(null);
+  });
+
+  // Updated timestamp
+  if (state.data.lastUpdated) {
+    const d = new Date(state.data.lastUpdated);
+    document.getElementById("updated").textContent = `Updated ${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  }
+}
+</script>
+</body>
+</html>
